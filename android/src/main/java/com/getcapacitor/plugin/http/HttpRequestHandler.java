@@ -126,6 +126,10 @@ public class HttpRequestHandler {
             String initialQuery = url.getQuery();
             String initialQueryBuilderStr = initialQuery == null ? "" : initialQuery;
 
+            if (params == null) {
+                return this;
+            }
+
             Iterator<String> keys = params.keys();
             
             if (!keys.hasNext()) {

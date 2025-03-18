@@ -1,0 +1,5 @@
+packages:
+  - 'example'
+  - 'example/www'
+  - 'example/server'
+  - 'example/electron'

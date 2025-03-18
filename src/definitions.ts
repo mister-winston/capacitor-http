@@ -20,14 +20,9 @@ export interface HttpPlugin {
   deleteCookie(options: HttpSingleCookieOptions): Promise<void>;
 
   uploadFile(options: HttpUploadFileOptions): Promise<HttpUploadFileResult>;
-  downloadFile(
-    options: HttpDownloadFileOptions,
-  ): Promise<HttpDownloadFileResult>;
+  downloadFile(options: HttpDownloadFileOptions): Promise<HttpDownloadFileResult>;
 
-  addListener(
-    eventName: 'progress',
-    listenerFunc: HttpProgressListener,
-  ): Promise<PluginListenerHandle> & PluginListenerHandle;
+  addListener(eventName: 'progress', listenerFunc: HttpProgressListener): Promise<PluginListenerHandle>;
 
   removeAllListeners(): Promise<void>;
 }
@@ -98,7 +93,7 @@ export interface HttpDownloadFileOptions extends HttpOptions {
    *
    * If this option is used, progress event should be dispatched on every chunk received
    */
-  progress?: Boolean;
+  progress?: boolean;
 }
 
 export interface HttpUploadFileOptions extends HttpOptions {

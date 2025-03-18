@@ -1,1 +1,8 @@
-{}
+{
+	"appId": "com.example.app",
+	"appName": "http-example",
+	"webDir": "www",
+	"packageClassList": [
+		"HttpPlugin"
+	]
+}
