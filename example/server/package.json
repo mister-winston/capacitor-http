@@ -4,25 +4,30 @@
   "private": true,
   "version": "0.1.0",
   "description": "Example server for @capacitor-community/http with Hapi.js",
-  "main": "server.mjs",
+  "main": "dist/server.js",
   "scripts": {
-    "start": "node --experimental-specifier-resolution=node dist/server.js",
-    "build": "tsc",
+    "dev": "nodemon",
+    "dev-run": "node --import @swc-node/register/esm-register ./src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc && swc src --strip-leading-paths --delete-dir-on-start -d dist",
     "test": "uvu tests"
   },
   "author": "Thomas Vidas <thomas@ionic.io>",
   "license": "MIT",
   "dependencies": {
-    "@hapi/hapi": "^20.2.1",
-    "@hapi/inert": "^6.0.4",
+    "@hapi/hapi": "^21.4.0",
+    "@hapi/inert": "^7.1.0",
     "form-data": "^4.0.0"
   },
   "devDependencies": {
-    "@types/hapi__hapi": "^20.0.9",
-    "@types/hapi__inert": "^5.2.3",
-    "@types/node": "^16.11.7",
-    "axios": "^0.24.0",
-    "typescript": "^4.4.4",
+    "@swc-node/register": "^1.10.10",
+    "@swc/cli": "^0.6.0",
+    "@swc/core": "^1.11.11",
+    "@swc/helpers": "^0.5.15",
+    "@types/node": "^22.13.0",
+    "axios": "^1.8.3",
+    "nodemon": "^3.1.9",
+    "typescript": "^5.8.2",
     "uvu": "^0.5.2"
   }
 }
