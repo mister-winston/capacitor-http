@@ -1,5 +1,10 @@
 packages:
+  - '.'
   - 'example'
   - 'example/www'
   - 'example/server'
   - 'example/electron'
+allowBuilds:
+  '@swc/core': true
+  electron: true
+  esbuild: true
