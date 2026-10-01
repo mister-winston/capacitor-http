@@ -1,12 +1,17 @@
-import fetch, { Response, RequestInfo, RequestInit } from 'node-fetch';
-import { EventEmitter } from 'stream';
-import { randomBytes } from 'crypto';
+import { randomBytes } from 'node:crypto';
+import { Agent as HttpsAgent, type RequestOptions } from 'node:https';
+import { EventEmitter } from 'node:stream';
+import fetch, { type RequestInfo, type RequestInit, type Response } from 'node-fetch';
 
 type ReturnType = Response & {
   headers: { [k: string]: string };
   url: string;
   id: string;
 };
+
+interface FetchOptions {
+  disableCertificateChecks?: boolean;
+}
 
 interface BodyEvents {
   error: (error: Error) => void;
@@ -15,13 +20,12 @@ interface BodyEvents {
 }
 
 class FetchHelper extends EventEmitter {
-  private static _responses = new Map<
-    string,
-    { response: Response; bodyEvents?: BodyEvents }
-  >();
+  private static _insecureHttpsAgent: HttpsAgent | null = null;
 
-  async fetch(url: RequestInfo, init?: RequestInit): Promise<ReturnType> {
-    const response = await fetch(url, init);
+  private static _responses = new Map<string, { response: Response; bodyEvents?: BodyEvents }>();
+
+  async fetch(url: RequestInfo, init?: RequestInit, options?: FetchOptions): Promise<ReturnType> {
+    const response = await fetch(url, { ...init, agent: this._getAgent(options?.disableCertificateChecks ?? false) });
 
     return FetchHelper._cloneResponse(response);
   }
@@ -57,10 +61,10 @@ class FetchHelper extends EventEmitter {
     const response = await FetchHelper._getResponse(id, false);
 
     const eventHandlers: BodyEvents = {
-      error: err => {
+      error: (err) => {
         this.emit(`body-${id}`, 'error', err);
       },
-      data: data => {
+      data: (data) => {
         this.emit(`body-${id}`, 'data', data);
       },
       close: () => {
@@ -83,8 +87,21 @@ class FetchHelper extends EventEmitter {
     });
   }
 
+  getFeatures(): { disableCertificateChecks: boolean; binaryData: boolean } {
+    return { disableCertificateChecks: true, binaryData: true };
+  }
+
   dispose(id: string): void {
     FetchHelper._dispose(id);
+  }
+
+  private _getAgent(disableCertificateChecks: boolean): (parsedUrl: URL) => RequestOptions['agent'] {
+    if (!FetchHelper._insecureHttpsAgent) {
+      FetchHelper._insecureHttpsAgent = new HttpsAgent({ rejectUnauthorized: false });
+    }
+
+    return (parsedUrl) =>
+      parsedUrl.protocol === 'https:' && disableCertificateChecks ? FetchHelper._insecureHttpsAgent : undefined;
   }
 
   private static _cloneResponse(response: Response): ReturnType {
@@ -115,20 +132,15 @@ class FetchHelper extends EventEmitter {
     FetchHelper._responses.delete(id);
   }
 
-  private static _getResponse(
-    id: string,
-    dispose = true,
-  ): Promise<{ response: Response; bodyEvents?: BodyEvents }> {
+  private static _getResponse(id: string, dispose = true): Promise<{ response: Response; bodyEvents?: BodyEvents }> {
     const response = FetchHelper._responses.get(id);
 
     if (dispose) {
       FetchHelper._dispose(id);
     }
 
-    return response
-      ? Promise.resolve(response)
-      : Promise.reject(new Error(`Response not found for ID '${id}'`));
+    return response ? Promise.resolve(response) : Promise.reject(new Error(`Response not found for ID '${id}'`));
   }
 }
 
-export { FetchHelper as Fetch, ReturnType };
+export { FetchHelper as Fetch, type ReturnType };

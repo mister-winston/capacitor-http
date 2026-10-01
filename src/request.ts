@@ -1,6 +1,6 @@
 import type { HttpOptions, HttpResponse, HttpParams, HttpHeaders } from './definitions';
-import { readBlobAsBase64 } from './utils';
-import electronFetch from './electronHelper';
+import { base64ToBytes, readBlobAsBase64 } from './utils';
+import electronFetch, { ElectronRequestInit } from './electronHelper';
 
 const fetch = electronFetch ?? window.fetch;
 
@@ -56,19 +56,28 @@ const buildUrlParams = (params?: HttpParams, shouldEncode: boolean = true): stri
  * @param options The Http plugin options
  * @param extra Any extra RequestInit values
  */
-export const buildRequestInit = (options: HttpOptions, extra: RequestInit = {}): RequestInit => {
-  const output: RequestInit = {
+export const buildRequestInit = (options: HttpOptions, extra: RequestInit = {}): ElectronRequestInit => {
+  const output: ElectronRequestInit = {
     method: options.method || 'GET',
     headers: options.headers,
     ...extra,
   };
 
+  // Only honoured by the Electron fetch, browsers cannot skip certificate checks
+  if (options.disableCertificateChecks) {
+    output.disableCertificateChecks = true;
+  }
+
   // Get the content-type
   const headers = normalizeHttpHeaders(options.headers);
   const type = headers['content-type'] || '';
 
+  // Binary data arrives as base64, send the decoded bytes
+  if (options.dataType === 'binary') {
+    output.body = base64ToBytes(options.data);
+  }
   // If body is already a string, then pass it through as-is.
-  if (typeof options.data === 'string') {
+  else if (typeof options.data === 'string') {
     output.body = options.data;
   }
   // Build request initializers based off of content-type

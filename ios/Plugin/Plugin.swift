@@ -96,6 +96,13 @@ import Foundation
         }
     }
 
+    @objc func getFeatures(_ call: CAPPluginCall) {
+        call.resolve([
+            "disableCertificateChecks": true,
+            "binaryData": true
+        ])
+    }
+
     @objc func setCookie(_ call: CAPPluginCall) {
         guard let key = call.getString("key") else { return call.reject("Must provide key") }
         guard let value = call.getString("value") else { return call.reject("Must provide value") }

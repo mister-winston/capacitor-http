@@ -25,13 +25,39 @@ export interface HttpPlugin {
   addListener(eventName: 'progress', listenerFunc: HttpProgressListener): Promise<PluginListenerHandle>;
 
   removeAllListeners(): Promise<void>;
+
+  /**
+   * Reports which optional features this build of the plugin supports.
+   * Builds from before this method was added reject the call, so treat a rejection as "nothing supported".
+   */
+  getFeatures(): Promise<HttpFeatures>;
+}
+
+export interface HttpFeatures {
+  /**
+   * True when `HttpOptions.disableCertificateChecks` is honoured on this platform
+   */
+  disableCertificateChecks: boolean;
+  /**
+   * True when `HttpOptions.dataType: 'binary'` is supported
+   */
+  binaryData: boolean;
 }
 
 export interface HttpOptions {
   url: string;
   method?: string;
   params?: HttpParams;
+  /**
+   * The request body. With `dataType: 'binary'`, a base64 string that is sent as raw bytes.
+   */
   data?: any;
+  /**
+   * Set to `'binary'` to send `data` (a base64 string) as raw bytes. The native bridge only carries JSON,
+   * so binary data cannot be passed as an `ArrayBuffer`. Raw bytes default to the `application/octet-stream`
+   * content type on Android and iOS.
+   */
+  dataType?: 'binary';
   headers?: HttpHeaders;
   /**
    * How long to wait to read additional data. Resets each time new
@@ -46,6 +72,12 @@ export interface HttpOptions {
    * Sets whether automatic HTTP redirects should be disabled
    */
   disableRedirects?: boolean;
+  /**
+   * Disables TLS certificate and hostname validation for this request.
+   * Only use this for hosts you trust (e.g. self-signed certificates on a local network).
+   * Supported on Android, iOS and Electron. Ignored in the browser. The default is _false_.
+   */
+  disableCertificateChecks?: boolean;
   /**
    * Extra arguments for fetch when running on the web
    */

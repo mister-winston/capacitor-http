@@ -139,6 +139,14 @@ public class Http extends Plugin {
     }
 
     @PluginMethod
+    public void getFeatures(final PluginCall call) {
+        JSObject features = new JSObject();
+        features.put("disableCertificateChecks", true);
+        features.put("binaryData", true);
+        call.resolve(features);
+    }
+
+    @PluginMethod
     public void downloadFile(final PluginCall call) {
         try {
             bridge.saveCall(call);

@@ -3,6 +3,7 @@ package com.getcapacitor.plugin.http;
 import android.os.Build;
 import android.os.LocaleList;
 import android.text.TextUtils;
+import android.util.Base64;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PluginCall;
@@ -16,13 +17,23 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.net.UnknownServiceException;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import org.json.JSONException;
 
 public class CapacitorHttpUrlConnection implements ICapacitorHttpUrlConnection {
+
+    private static SSLSocketFactory trustAllSocketFactory;
 
     private final HttpURLConnection connection;
 
@@ -142,6 +153,49 @@ public class CapacitorHttpUrlConnection implements ICapacitorHttpUrlConnection {
     }
 
     /**
+     * Disables TLS certificate and hostname validation. Has no effect on non-HTTPS connections.
+     * @param disableCertificateChecks the flag to determine if certificate checks should be skipped
+     */
+    public void setDisableCertificateChecks(boolean disableCertificateChecks) throws IOException {
+        if (!disableCertificateChecks || !(connection instanceof HttpsURLConnection)) {
+            return;
+        }
+
+        HttpsURLConnection httpsConnection = (HttpsURLConnection) connection;
+        httpsConnection.setSSLSocketFactory(getTrustAllSocketFactory());
+        httpsConnection.setHostnameVerifier((hostname, session) -> true);
+    }
+
+    private static synchronized SSLSocketFactory getTrustAllSocketFactory() throws IOException {
+        if (trustAllSocketFactory == null) {
+            TrustManager[] trustAllManagers = new TrustManager[] {
+                new X509TrustManager() {
+                    @Override
+                    public void checkClientTrusted(X509Certificate[] chain, String authType) {}
+
+                    @Override
+                    public void checkServerTrusted(X509Certificate[] chain, String authType) {}
+
+                    @Override
+                    public X509Certificate[] getAcceptedIssuers() {
+                        return new X509Certificate[0];
+                    }
+                },
+            };
+
+            try {
+                SSLContext sslContext = SSLContext.getInstance("TLS");
+                sslContext.init(null, trustAllManagers, new SecureRandom());
+                trustAllSocketFactory = sslContext.getSocketFactory();
+            } catch (GeneralSecurityException e) {
+                throw new IOException("Unable to disable certificate checks", e);
+            }
+        }
+
+        return trustAllSocketFactory;
+    }
+
+    /**
      * Sets the request headers given a JSObject of key-value pairs
      * @param headers the JSObject values to map to the HttpUrlConnection request headers
      */
@@ -178,6 +232,15 @@ public class CapacitorHttpUrlConnection implements ICapacitorHttpUrlConnection {
     public void setRequestBody(PluginCall call, JSValue body) throws JSONException, IOException {
         String contentType = connection.getRequestProperty("Content-Type");
         String dataString = "";
+
+        // Raw binary data arrives base64 encoded from the JS side
+        if ("binary".equals(call.getString("dataType"))) {
+            if (contentType == null || contentType.isEmpty()) {
+                connection.setRequestProperty("Content-Type", "application/octet-stream");
+            }
+            this.writeRequestBody(Base64.decode(call.getString("data", ""), Base64.DEFAULT));
+            return;
+        }
 
         if (contentType == null || contentType.isEmpty()) return;
 
@@ -238,8 +301,17 @@ public class CapacitorHttpUrlConnection implements ICapacitorHttpUrlConnection {
      * @param body The string value to write to the connection stream.
      */
     private void writeRequestBody(String body) throws IOException {
+        this.writeRequestBody(body.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Writes the provided bytes to the HTTP connection managed by this instance.
+     *
+     * @param body The bytes to write to the connection stream.
+     */
+    private void writeRequestBody(byte[] body) throws IOException {
         try (DataOutputStream os = new DataOutputStream(connection.getOutputStream())) {
-            os.write(body.getBytes(StandardCharsets.UTF_8));
+            os.write(body);
             os.flush();
         }
     }

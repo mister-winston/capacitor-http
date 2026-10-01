@@ -185,7 +185,14 @@ class HttpRequestHandler {
         let timeout = (connectTimeout ?? readTimeout ?? 600000.0) / 1000.0;
         request.setTimeout(timeout)
 
-        if let data = call.options["data"] as? JSValue {
+        // Raw binary data arrives base64 encoded from the JS side
+        if call.getString("dataType") == "binary" {
+            guard let base64 = call.getString("data"), let body = Data(base64Encoded: base64) else {
+                call.reject("[ data ] argument could not be decoded as binary data", "REQUEST")
+                return
+            }
+            request.setRequestBody(binary: body)
+        } else if let data = call.options["data"] as? JSValue {
             do {
                 try request.setRequestBody(data)
             } catch {
@@ -201,6 +208,8 @@ class HttpRequestHandler {
         let task = urlSession.dataTask(with: urlRequest) { (data, response, error) in
             urlSession.invalidateAndCancel();
             if error != nil {
+                CAPLog.print("Error on request", String(describing: data), String(describing: response), String(describing: error))
+                call.reject("Error", "REQUEST", error, [:])
                 return
             }
 
@@ -244,8 +253,12 @@ class HttpRequestHandler {
 
         guard let form = try? generateMultipartForm(fileUrl, name, boundary, body) else { throw URLError(.cannotCreateFile) }
 
+        request.disableCertificateChecks = call.getBool("disableCertificateChecks") ?? false
+
         let urlRequest = request.getUrlRequest();
-        let task = URLSession.shared.uploadTask(with: urlRequest, from: form) { (data, response, error) in
+        let urlSession = request.getUrlSession();
+        let task = urlSession.uploadTask(with: urlRequest, from: form) { (data, response, error) in
+            urlSession.finishTasksAndInvalidate();
             if error != nil {
                 CAPLog.print("Error on upload file", String(describing: data), String(describing: response), String(describing: error))
                 call.reject("Error", "UPLOAD", error, [:])
@@ -266,6 +279,7 @@ class HttpRequestHandler {
         let connectTimeout = call.getDouble("connectTimeout");
         let readTimeout = call.getDouble("readTimeout");
         let progress = call.getBool("progress") ?? false
+        let disableCertificateChecks = call.getBool("disableCertificateChecks") ?? false
 
         guard let urlString = call.getString("url") else { throw URLError(.badURL) }
         guard let filePath = call.getString("filePath") else { throw URLError(.badURL) }
@@ -330,10 +344,16 @@ class HttpRequestHandler {
                 private var downloadLocation: URL?;
                 private var response: URLResponse?;
                 private var emitter: (Int64, Int64) -> Void;
+                private var disableCertificateChecks: Bool;
 
-                init(downloadHandler: @escaping (URL?, URLResponse?, Error?) -> Void, progressEmitter: @escaping (Int64, Int64) -> Void) {
+                init(downloadHandler: @escaping (URL?, URLResponse?, Error?) -> Void, progressEmitter: @escaping (Int64, Int64) -> Void, disableCertificateChecks: Bool) {
                     handler = downloadHandler
                     emitter = progressEmitter
+                    self.disableCertificateChecks = disableCertificateChecks
+                }
+
+                func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+                    CapacitorUrlRequest.handleServerTrust(challenge, disableCertificateChecks, completionHandler)
                 }
 
                 func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
@@ -357,12 +377,17 @@ class HttpRequestHandler {
                 }
             }
 
-            let progressDelegate = ProgressDelegate(downloadHandler: handleDownload, progressEmitter: updateProgress)
+            let progressDelegate = ProgressDelegate(downloadHandler: handleDownload, progressEmitter: updateProgress, disableCertificateChecks: disableCertificateChecks)
             session = URLSession(configuration: .default, delegate: progressDelegate, delegateQueue: nil)
             task = session.downloadTask(with: urlRequest)
         }
         else {
-            task = URLSession.shared.downloadTask(with: urlRequest, completionHandler: handleDownload)
+            request.disableCertificateChecks = disableCertificateChecks
+            session = request.getUrlSession()
+            task = session.downloadTask(with: urlRequest) { (location, response, error) in
+                handleDownload(downloadLocation: location, response: response, error: error)
+                session.finishTasksAndInvalidate()
+            }
         }
 
         task.resume()

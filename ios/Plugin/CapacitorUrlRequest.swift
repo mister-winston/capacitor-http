@@ -4,6 +4,8 @@ import Capacitor
 public class CapacitorUrlRequest: NSObject, URLSessionTaskDelegate {
     private var request: URLRequest;
     private var headers: [String:String];
+    public var disableRedirects = false;
+    public var disableCertificateChecks = false;
     
     enum CapacitorUrlRequestError: Error {
         case serializationError(String?)
@@ -122,6 +124,14 @@ public class CapacitorUrlRequest: NSObject, URLSessionTaskDelegate {
         }
     }
 
+    /// Sets raw bytes as the request body, defaulting the content type to application/octet-stream
+    public func setRequestBody(binary body: Data) {
+        if self.getRequestHeader("Content-Type") == nil {
+            setContentType("application/octet-stream")
+        }
+        request.httpBody = body
+    }
+
     public func setContentType(_ data: String?) {
         request.setValue(data, forHTTPHeaderField: "Content-Type")
     }
@@ -135,12 +145,32 @@ public class CapacitorUrlRequest: NSObject, URLSessionTaskDelegate {
     }
     
     public func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
-        completionHandler(nil)
+        completionHandler(disableRedirects ? nil : request)
+    }
+
+    public func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        CapacitorUrlRequest.handleServerTrust(challenge, disableCertificateChecks, completionHandler)
+    }
+
+    /// Accepts any server certificate when certificate checks are disabled, otherwise uses the default handling
+    public static func handleServerTrust(_ challenge: URLAuthenticationChallenge, _ disableCertificateChecks: Bool, _ completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        if disableCertificateChecks,
+           challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+           let serverTrust = challenge.protectionSpace.serverTrust {
+            completionHandler(.useCredential, URLCredential(trust: serverTrust))
+            return
+        }
+        completionHandler(.performDefaultHandling, nil)
     }
 
     public func getUrlSession(_ call: CAPPluginCall) -> URLSession {
-        let disableRedirects = call.getBool("disableRedirects") ?? false
-        if (!disableRedirects) {
+        disableRedirects = call.getBool("disableRedirects") ?? false
+        disableCertificateChecks = call.getBool("disableCertificateChecks") ?? false
+        return getUrlSession()
+    }
+
+    public func getUrlSession() -> URLSession {
+        if (!disableRedirects && !disableCertificateChecks) {
             return URLSession.shared
         }
         return URLSession(configuration: URLSessionConfiguration.default, delegate: self, delegateQueue: nil)
