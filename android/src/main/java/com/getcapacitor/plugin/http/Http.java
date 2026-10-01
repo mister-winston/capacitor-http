@@ -14,6 +14,8 @@ import java.io.IOException;
 import java.net.HttpCookie;
 import java.net.MalformedURLException;
 import java.net.URI;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Native HTTP Plugin
@@ -22,7 +24,7 @@ import java.net.URI;
     name = "Http",
     permissions = {
         @Permission(strings = { Manifest.permission.WRITE_EXTERNAL_STORAGE }, alias = "HttpWrite"),
-        @Permission(strings = { Manifest.permission.WRITE_EXTERNAL_STORAGE }, alias = "HttpRead")
+        @Permission(strings = { Manifest.permission.READ_EXTERNAL_STORAGE }, alias = "HttpRead")
     }
 )
 public class Http extends Plugin {
@@ -32,6 +34,8 @@ public class Http extends Plugin {
 
     CapConfig capConfig;
     CapacitorCookieManager cookieManager;
+
+    private final ExecutorService executor = Executors.newCachedThreadPool();
 
     /**
      * Helper function for getting the serverUrl from the Capacitor Config. Returns an empty
@@ -76,20 +80,25 @@ public class Http extends Plugin {
     }
 
     private void http(final PluginCall call, final String httpMethod) {
-        Runnable asyncHttpCall = new Runnable() {
-            @Override
-            public void run() {
+        executor.execute(
+            () -> {
                 try {
                     JSObject response = HttpRequestHandler.request(call, httpMethod);
                     call.resolve(response);
                 } catch (Exception e) {
-                    System.out.println(e.toString());
-                    call.reject(e.getClass().getSimpleName(), e);
+                    Log.e(getLogTag(), "HTTP request failed", e);
+                    String code = e.getClass().getSimpleName();
+                    String message = e.getLocalizedMessage();
+                    call.reject(message != null ? message : code, code, e);
                 }
             }
-        };
-        Thread httpThread = new Thread(asyncHttpCall);
-        httpThread.start();
+        );
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        executor.shutdownNow();
+        super.handleOnDestroy();
     }
 
     @Override

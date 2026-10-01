@@ -11,7 +11,10 @@ import Foundation
             return nil
         }
         
-        let url = URL(string: urlString)
+        guard let url = URL(string: urlString) else {
+            call.reject("Invalid URL. Check that \"url\" is passed in correctly")
+            return nil
+        }
         return url;
     }
     
@@ -23,7 +26,6 @@ import Foundation
     @objc func http(_ call: CAPPluginCall, _ httpMethod: String?) {
         // Protect against bad values from JS before calling request
         guard let u = call.getString("url") else { return call.reject("Must provide a URL"); }
-        guard let _ = httpMethod ?? call.getString("method") else { return call.reject("Must provide an HTTP Method"); }
         guard var _ = URL(string: u) else { return call.reject("Invalid URL"); }
     
         do {
@@ -139,8 +141,8 @@ import Foundation
         if url != nil {
             let cookie = cookieManager!.getCookie(url!, key)
             call.resolve([
-                "key": cookie.name,
-                "value": cookieManager!.decode(cookie.value)
+                "key": key,
+                "value": cookie.map { cookieManager!.decode($0.value) } ?? ""
             ])
         }
     }

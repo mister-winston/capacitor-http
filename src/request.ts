@@ -1,9 +1,4 @@
-import type {
-  HttpOptions,
-  HttpResponse,
-  HttpParams,
-  HttpHeaders,
-} from './definitions';
+import type { HttpOptions, HttpResponse, HttpParams, HttpHeaders } from './definitions';
 import { readBlobAsBase64 } from './utils';
 import electronFetch from './electronHelper';
 
@@ -15,7 +10,7 @@ const fetch = electronFetch ?? window.fetch;
  */
 const normalizeHttpHeaders = (headers: HttpHeaders = {}): HttpHeaders => {
   const originalKeys = Object.keys(headers);
-  const loweredKeys = Object.keys(headers).map(k => k.toLocaleLowerCase());
+  const loweredKeys = Object.keys(headers).map((k) => k.toLocaleLowerCase());
   const normalized = loweredKeys.reduce<HttpHeaders>((acc, key, index) => {
     acc[key] = headers[originalKeys[index]];
     return acc;
@@ -28,10 +23,7 @@ const normalizeHttpHeaders = (headers: HttpHeaders = {}): HttpHeaders => {
  * @param params A map of url parameters
  * @param shouldEncode true if you should encodeURIComponent() the values (true by default)
  */
-const buildUrlParams = (
-  params?: HttpParams,
-  shouldEncode: boolean = true,
-): string | null => {
+const buildUrlParams = (params?: HttpParams, shouldEncode: boolean = true): string | null => {
   if (!params) return null;
 
   const output = Object.entries(params).reduce((accumulator, entry) => {
@@ -41,12 +33,12 @@ const buildUrlParams = (
     let item: string;
     if (Array.isArray(value)) {
       item = '';
-      value.forEach(str => {
+      value.forEach((str) => {
         encodedValue = shouldEncode ? encodeURIComponent(str) : str;
         item += `${key}=${encodedValue}&`;
       });
       // last character will always be "&" so slice it off
-      item.slice(0, -1);
+      item = item.slice(0, -1);
     } else {
       encodedValue = shouldEncode ? encodeURIComponent(value) : value;
       item = `${key}=${encodedValue}`;
@@ -56,7 +48,7 @@ const buildUrlParams = (
   }, '');
 
   // Remove initial "&" from the reduce
-  return output.substr(1);
+  return output.slice(1);
 };
 
 /**
@@ -64,10 +56,7 @@ const buildUrlParams = (
  * @param options The Http plugin options
  * @param extra Any extra RequestInit values
  */
-export const buildRequestInit = (
-  options: HttpOptions,
-  extra: RequestInit = {},
-): RequestInit => {
+export const buildRequestInit = (options: HttpOptions, extra: RequestInit = {}): RequestInit => {
   const output: RequestInit = {
     method: options.method || 'GET',
     headers: options.headers,
@@ -89,7 +78,7 @@ export const buildRequestInit = (
       params.set(key, value as any);
     }
     output.body = params.toString();
-  } else if (type.includes('multipart/form-data')) {
+  } else if (type.includes('multipart/form-data') || options.data instanceof FormData) {
     const form = new FormData();
     if (options.data instanceof FormData) {
       options.data.forEach((value, key) => {
@@ -104,10 +93,7 @@ export const buildRequestInit = (
     const headers = new Headers(output.headers);
     headers.delete('content-type'); // content-type will be set by `window.fetch` to include boundary
     output.headers = headers;
-  } else if (
-    type.includes('application/json') ||
-    typeof options.data === 'object'
-  ) {
+  } else if (type.includes('application/json') || typeof options.data === 'object') {
     output.body = JSON.stringify(options.data);
   }
 
@@ -120,10 +106,7 @@ export const buildRequestInit = (
  */
 export const request = async (options: HttpOptions): Promise<HttpResponse> => {
   const requestInit = buildRequestInit(options, options.webFetchExtra);
-  const urlParams = buildUrlParams(
-    options.params,
-    options.shouldEncodeUrlParams,
-  );
+  const urlParams = buildUrlParams(options.params, options.shouldEncodeUrlParams);
   const url = urlParams ? `${options.url}?${urlParams}` : options.url;
 
   const response = await fetch(url, requestInit);
@@ -171,33 +154,28 @@ export const request = async (options: HttpOptions): Promise<HttpResponse> => {
  * Perform an Http GET request given a set of options
  * @param options Options to build the HTTP request
  */
-export const get = async (options: HttpOptions): Promise<HttpResponse> =>
-  request({ ...options, method: 'GET' });
+export const get = async (options: HttpOptions): Promise<HttpResponse> => request({ ...options, method: 'GET' });
 
 /**
  * Perform an Http POST request given a set of options
  * @param options Options to build the HTTP request
  */
-export const post = async (options: HttpOptions): Promise<HttpResponse> =>
-  request({ ...options, method: 'POST' });
+export const post = async (options: HttpOptions): Promise<HttpResponse> => request({ ...options, method: 'POST' });
 
 /**
  * Perform an Http PUT request given a set of options
  * @param options Options to build the HTTP request
  */
-export const put = async (options: HttpOptions): Promise<HttpResponse> =>
-  request({ ...options, method: 'PUT' });
+export const put = async (options: HttpOptions): Promise<HttpResponse> => request({ ...options, method: 'PUT' });
 
 /**
  * Perform an Http PATCH request given a set of options
  * @param options Options to build the HTTP request
  */
-export const patch = async (options: HttpOptions): Promise<HttpResponse> =>
-  request({ ...options, method: 'PATCH' });
+export const patch = async (options: HttpOptions): Promise<HttpResponse> => request({ ...options, method: 'PATCH' });
 
 /**
  * Perform an Http DELETE request given a set of options
  * @param options Options to build the HTTP request
  */
-export const del = async (options: HttpOptions): Promise<HttpResponse> =>
-  request({ ...options, method: 'DELETE' });
+export const del = async (options: HttpOptions): Promise<HttpResponse> => request({ ...options, method: 'DELETE' });

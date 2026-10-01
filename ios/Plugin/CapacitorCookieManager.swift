@@ -3,11 +3,11 @@ import Capacitor
 
 public class CapacitorCookieManager {
     public func encode(_ value: String) -> String {
-        return value.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!
+        return value.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? value
     }
     
     public func decode(_ value: String) -> String {
-        return value.removingPercentEncoding!
+        return value.removingPercentEncoding ?? value
     }
     
     public func setCookie(_ url: URL, _ key: String, _ value: String) {
@@ -17,14 +17,8 @@ public class CapacitorCookieManager {
         jar.setCookies(cookies, for: url, mainDocumentURL: url)
     }
     
-    public func getCookie(_ url: URL, _ key: String) -> HTTPCookie {
-        let cookies = getCookies(url)
-        for cookie in cookies {
-            if (cookie.name == key) {
-                return cookie
-            }
-        }
-        return HTTPCookie()
+    public func getCookie(_ url: URL, _ key: String) -> HTTPCookie? {
+        return getCookies(url).first(where: { cookie in cookie.name == key })
     }
     
     public func getCookies(_ url: URL) -> [HTTPCookie] {

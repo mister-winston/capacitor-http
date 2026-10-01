@@ -33,24 +33,20 @@ public class CapacitorUrlRequest: NSObject, URLSessionTaskDelegate {
     }
     
     private func getRequestDataAsFormUrlEncoded(_ data: JSValue) throws -> Data? {
-        guard var components = URLComponents(url: request.url!, resolvingAgainstBaseURL: false) else { return nil }
-        components.queryItems = []
-        
         guard let obj = data as? JSObject else {
             // Throw, other data types explicitly not supported
             throw CapacitorUrlRequestError.serializationError("[ data ] argument for request with content-type [ multipart/form-data ] may only be a plain javascript object")
         }
-        
-        obj.keys.forEach { (key: String) in
-            components.queryItems?.append(URLQueryItem(name: key, value: "\(obj[key] ?? "")"))
-        }
-        
-        
-        if components.query != nil {
-            return Data(components.query!.utf8)
+
+        // URLComponents leaves characters such as "+" and "&" unescaped, so encode everything outside the unreserved set
+        let unreserved = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
+        let encode = { (value: String) -> String in
+            value.addingPercentEncoding(withAllowedCharacters: unreserved) ?? value
         }
 
-        return nil
+        let query = obj.map { key, value in "\(encode(key))=\(encode("\(value)"))" }.joined(separator: "&")
+
+        return query.isEmpty ? nil : Data(query.utf8)
     }
     
     private func getRequestDataAsMultipartFormData(_ data: JSValue) throws -> Data {
@@ -113,7 +109,7 @@ public class CapacitorUrlRequest: NSObject, URLSessionTaskDelegate {
     public func setRequestHeaders(_ headers: [String: String]) {
         headers.keys.forEach { (key: String) in
             let value = headers[key]
-            request.addValue(value!, forHTTPHeaderField: key)
+            request.setValue(value!, forHTTPHeaderField: key)
             self.headers[key] = value
         }
     }
