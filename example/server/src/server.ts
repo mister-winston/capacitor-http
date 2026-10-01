@@ -1,12 +1,11 @@
 import Hapi from '@hapi/hapi';
 import Inert from '@hapi/inert';
-import BasicRoutes from './routes/basic';
-import ContentTypeRoutes from './routes/content-type';
+import BasicRoutes from './routes/basic/index.js';
+import ContentTypeRoutes from './routes/content-type/index.js';
 
 const init = async () => {
   const server = Hapi.server({
     port: 3000,
-    host: 'localhost',
     routes: {
       cors: {
         origin: ['*'], // an array of origins or 'ignore'
@@ -14,6 +13,7 @@ const init = async () => {
       },
     },
   });
+
   await server.register(Inert);
 
   server.route(BasicRoutes);
@@ -23,12 +23,12 @@ const init = async () => {
   console.log('Server running on %s', server.info.uri);
 };
 
-process.on('unhandledRejection', (err: any) => {
+process.on('unhandledRejection', err => {
   console.log(err);
   process.exit(1);
 });
 
-init();
+init().catch(console.error);
 
 /*
 import express from 'express'

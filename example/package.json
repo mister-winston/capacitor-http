@@ -3,45 +3,20 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@capacitor-community/electron": "^4.1.0",
-    "@capacitor-community/http": "file:../",
-    "@capacitor/android": "^3.3.2",
-    "@capacitor/core": "^3.3.2",
-    "@capacitor/ios": "^3.3.2",
-    "@ionic/react": "^6.0.0-rc.3",
-    "react": "^17.0.2",
-    "react-dom": "^17.0.2"
+    "@capacitor-community/electron": "^5.0.1",
+    "@capacitor-community/http": "file:..",
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/core": "^7.0.0",
+    "@capacitor/ios": "^7.0.0"
   },
   "devDependencies": {
-    "@capacitor/cli": "^3.3.2",
-    "@types/node": "^12.0.0",
-    "@types/react": "^17.0.0",
-    "@types/react-dom": "^17.0.0",
-    "react-scripts": "4.0.3",
-    "typescript": "^4.1.2"
+    "@capacitor/cli": "^7.0.0",
+    "@types/node": "^22.13.0"
   },
   "scripts": {
-    "start": "export PORT=8000 && react-scripts start",
-    "build": "export BUILD_PATH='./www' && react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "react-app/jest"
-    ]
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
+    "build-ui": "cd www && npm run build",
+    "open-desktop": "npm run build-ui && cap sync @capacitor-community/electron && cap open @capacitor-community/electron",
+    "open-android": "npm run build-ui && cap sync android && cap open android",
+    "open-ios": "npm run build-ui && cap sync ios && cap open ios"
   }
 }
