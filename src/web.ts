@@ -12,6 +12,7 @@ import type {
   HttpSetCookieOptions,
   HttpMultiCookiesOptions,
   HttpSingleCookieOptions,
+  HttpFeatures,
   ProgressStatus,
 } from './definitions';
 import { WebPlugin } from '@capacitor/core';
@@ -30,43 +31,60 @@ export class HttpWeb extends WebPlugin implements HttpPlugin {
    * Perform an Http request given a set of options
    * @param options Options to build the HTTP request
    */
-  public request = async (options: HttpOptions): Promise<HttpResponse> =>
-    Request.request(options);
+  public request = async (options: HttpOptions): Promise<HttpResponse> => Request.request(options);
 
   /**
    * Perform an Http GET request given a set of options
    * @param options Options to build the HTTP request
    */
-  public get = async (options: HttpOptions): Promise<HttpResponse> =>
-    Request.get(options);
+  public get = async (options: HttpOptions): Promise<HttpResponse> => Request.get(options);
 
   /**
    * Perform an Http POST request given a set of options
    * @param options Options to build the HTTP request
    */
-  public post = async (options: HttpOptions): Promise<HttpResponse> =>
-    Request.post(options);
+  public post = async (options: HttpOptions): Promise<HttpResponse> => Request.post(options);
 
   /**
    * Perform an Http PUT request given a set of options
    * @param options Options to build the HTTP request
    */
-  public put = async (options: HttpOptions): Promise<HttpResponse> =>
-    Request.put(options);
+  public put = async (options: HttpOptions): Promise<HttpResponse> => Request.put(options);
 
   /**
    * Perform an Http PATCH request given a set of options
    * @param options Options to build the HTTP request
    */
-  public patch = async (options: HttpOptions): Promise<HttpResponse> =>
-    Request.patch(options);
+  public patch = async (options: HttpOptions): Promise<HttpResponse> => Request.patch(options);
 
   /**
    * Perform an Http DELETE request given a set of options
    * @param options Options to build the HTTP request
    */
-  public del = async (options: HttpOptions): Promise<HttpResponse> =>
-    Request.del(options);
+  public del = async (options: HttpOptions): Promise<HttpResponse> => Request.del(options);
+
+  /**
+   * Reports which optional features are supported. On Electron the main process reports them,
+   * and an Electron build without `getFeatures` reports nothing as supported.
+   */
+  public getFeatures = async (): Promise<HttpFeatures> => {
+    const electronPlugin = window.CapacitorCustomPlatform?.plugins.Fetch;
+
+    if (electronPlugin) {
+      return (
+        (await electronPlugin.getFeatures?.()) ?? {
+          disableCertificateChecks: false,
+          binaryData: false,
+        }
+      );
+    }
+
+    // Browsers cannot skip certificate checks, but fetch accepts binary bodies
+    return {
+      disableCertificateChecks: false,
+      binaryData: true,
+    };
+  };
 
   /**
    * Gets all HttpCookies as a Map
@@ -88,9 +106,7 @@ export class HttpWeb extends WebPlugin implements HttpPlugin {
   /**
    * Get all HttpCookies as an object with the values as an HttpCookie[]
    */
-  public getCookies = async (
-    options: HttpMultiCookiesOptions,
-  ): Promise<HttpGetCookiesResult> => {
+  public getCookies = async (options: HttpMultiCookiesOptions): Promise<HttpGetCookiesResult> => {
     // @ts-ignore
     const { url } = options;
 
@@ -113,17 +129,13 @@ export class HttpWeb extends WebPlugin implements HttpPlugin {
    * Gets all cookie values unless a key is specified, then return only that value
    * @param key The key of the cookie value to get
    */
-  public getCookie = async (
-    options: HttpSingleCookieOptions,
-  ): Promise<HttpCookie> => Cookie.getCookie(options.key);
+  public getCookie = async (options: HttpSingleCookieOptions): Promise<HttpCookie> => Cookie.getCookie(options.key);
 
   /**
    * Deletes a cookie given a key
    * @param key The key of the cookie to delete
    */
-  public deleteCookie = async (
-    options: HttpSingleCookieOptions,
-  ): Promise<void> => Cookie.deleteCookie(options.key);
+  public deleteCookie = async (options: HttpSingleCookieOptions): Promise<void> => Cookie.deleteCookie(options.key);
 
   /**
    * Clears out cookies by setting them to expire immediately
@@ -142,9 +154,7 @@ export class HttpWeb extends WebPlugin implements HttpPlugin {
    * Uploads a file through a POST request
    * @param options TODO
    */
-  public uploadFile = async (
-    options: HttpUploadFileOptions,
-  ): Promise<HttpUploadFileResult> => {
+  public uploadFile = async (options: HttpUploadFileOptions): Promise<HttpUploadFileResult> => {
     const formData = new FormData();
     formData.append(options.name, options.blob || 'undefined');
     const fetchOptions = {
@@ -160,13 +170,8 @@ export class HttpWeb extends WebPlugin implements HttpPlugin {
    * Downloads a file
    * @param options TODO
    */
-  public downloadFile = async (
-    options: HttpDownloadFileOptions,
-  ): Promise<HttpDownloadFileResult> => {
-    const requestInit = Request.buildRequestInit(
-      options,
-      options.webFetchExtra,
-    );
+  public downloadFile = async (options: HttpDownloadFileOptions): Promise<HttpDownloadFileResult> => {
+    const requestInit = Request.buildRequestInit(options, options.webFetchExtra);
     const response = await fetch(options.url, requestInit);
     let blob: Blob;
 
@@ -179,10 +184,7 @@ export class HttpWeb extends WebPlugin implements HttpPlugin {
       let chunks: Array<Uint8Array | undefined> = [];
 
       const contentType: string | null = response.headers.get('content-type');
-      const contentLength: number = parseInt(
-        response.headers.get('content-length') || '0',
-        10,
-      );
+      const contentLength: number = parseInt(response.headers.get('content-length') || '0', 10);
 
       while (true) {
         const { done, value } = await reader.read();

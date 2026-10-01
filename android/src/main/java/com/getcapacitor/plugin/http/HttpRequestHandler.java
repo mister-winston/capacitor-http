@@ -71,6 +71,7 @@ public class HttpRequestHandler {
         private Integer connectTimeout;
         private Integer readTimeout;
         private Boolean disableRedirects;
+        private Boolean disableCertificateChecks;
         private JSObject headers;
         private String method;
         private URL url;
@@ -89,6 +90,11 @@ public class HttpRequestHandler {
 
         public HttpURLConnectionBuilder setDisableRedirects(Boolean disableRedirects) {
             this.disableRedirects = disableRedirects;
+            return this;
+        }
+
+        public HttpURLConnectionBuilder setDisableCertificateChecks(Boolean disableCertificateChecks) {
+            this.disableCertificateChecks = disableCertificateChecks;
             return this;
         }
 
@@ -116,6 +122,7 @@ public class HttpRequestHandler {
             if (connectTimeout != null) connection.setConnectTimeout(connectTimeout);
             if (readTimeout != null) connection.setReadTimeout(readTimeout);
             if (disableRedirects != null) connection.setDisableRedirects(disableRedirects);
+            if (disableCertificateChecks != null) connection.setDisableCertificateChecks(disableCertificateChecks);
 
             connection.setRequestHeaders(headers);
             return this;
@@ -389,6 +396,7 @@ public class HttpRequestHandler {
         Integer connectTimeout = call.getInt("connectTimeout");
         Integer readTimeout = call.getInt("readTimeout");
         Boolean disableRedirects = call.getBoolean("disableRedirects");
+        Boolean disableCertificateChecks = call.getBoolean("disableCertificateChecks", false);
         Boolean shouldEncode = call.getBoolean("shouldEncodeUrlParams", true);
         ResponseType responseType = ResponseType.parse(call.getString("responseType"));
 
@@ -405,6 +413,7 @@ public class HttpRequestHandler {
             .setConnectTimeout(connectTimeout)
             .setReadTimeout(readTimeout)
             .setDisableRedirects(disableRedirects)
+            .setDisableCertificateChecks(disableCertificateChecks)
             .openConnection();
 
         CapacitorHttpUrlConnection connection = connectionBuilder.build();
@@ -445,6 +454,7 @@ public class HttpRequestHandler {
         JSObject params = call.getObject("params", new JSObject());
         Integer connectTimeout = call.getInt("connectTimeout");
         Integer readTimeout = call.getInt("readTimeout");
+        Boolean disableCertificateChecks = call.getBoolean("disableCertificateChecks", false);
 
         final URL url = new URL(urlString);
         final File file = FilesystemUtils.getFileObject(context, filePath, fileDirectory);
@@ -456,6 +466,7 @@ public class HttpRequestHandler {
             .setUrlParams(params)
             .setConnectTimeout(connectTimeout)
             .setReadTimeout(readTimeout)
+            .setDisableCertificateChecks(disableCertificateChecks)
             .openConnection();
 
         CapacitorHttpUrlConnection connection = connectionBuilder.build();
@@ -511,6 +522,7 @@ public class HttpRequestHandler {
         String name = call.getString("name", "file");
         Integer connectTimeout = call.getInt("connectTimeout");
         Integer readTimeout = call.getInt("readTimeout");
+        Boolean disableCertificateChecks = call.getBoolean("disableCertificateChecks", false);
         JSObject headers = call.getObject("headers", new JSObject());
         JSObject params = call.getObject("params", new JSObject());
         JSObject data = call.getObject("data");
@@ -527,6 +539,7 @@ public class HttpRequestHandler {
             .setUrlParams(params)
             .setConnectTimeout(connectTimeout)
             .setReadTimeout(readTimeout)
+            .setDisableCertificateChecks(disableCertificateChecks)
             .openConnection();
 
         CapacitorHttpUrlConnection connection = connectionBuilder.build();

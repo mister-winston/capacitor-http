@@ -7,14 +7,19 @@ export const readBlobAsBase64 = async (blob: Blob): Promise<string> =>
     const reader = new FileReader();
     reader.onload = () => {
       const base64String = reader.result as string;
-      const base64StringWithoutTags = base64String.substring(
-        base64String.indexOf(',') + 1,
-      ); // remove prefix "data:application/pdf;base64,"
+      const base64StringWithoutTags = base64String.substring(base64String.indexOf(',') + 1); // remove prefix "data:application/pdf;base64,"
       resolve(base64StringWithoutTags);
     };
     reader.onerror = (error: any) => reject(error);
     reader.readAsDataURL(blob);
   });
+
+/**
+ * Decode a base64 string into raw bytes
+ * @param base64 The base64 string to decode
+ */
+export const base64ToBytes = (base64: string): Uint8Array =>
+  Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
 
 /**
  * Safely web encode a string value (inspired by js-cookie)
@@ -29,5 +34,4 @@ export const encode = (str: string) =>
  * Safely web decode a string value (inspired by js-cookie)
  * @param str The string value to decode
  */
-export const decode = (str: string): string =>
-  str.replace(/(%[\dA-F]{2})+/gi, decodeURIComponent);
+export const decode = (str: string): string => str.replace(/(%[\dA-F]{2})+/gi, decodeURIComponent);
