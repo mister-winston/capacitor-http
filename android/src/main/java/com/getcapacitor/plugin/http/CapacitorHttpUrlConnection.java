@@ -46,6 +46,13 @@ public class CapacitorHttpUrlConnection implements ICapacitorHttpUrlConnection {
     }
 
     /**
+     * Releases the underlying connection once the response has been read
+     */
+    public void disconnect() {
+        connection.disconnect();
+    }
+
+    /**
      * Set the value of the {@code allowUserInteraction} field of
      * this {@code URLConnection}.
      *
@@ -188,6 +195,12 @@ public class CapacitorHttpUrlConnection implements ICapacitorHttpUrlConnection {
             }
             this.writeRequestBody(dataString.toString());
         } else if (contentType.contains("application/x-www-form-urlencoded")) {
+            // An already encoded string body is sent as-is
+            if (!(body.getValue() instanceof JSObject)) {
+                this.writeRequestBody(body.toString());
+                return;
+            }
+
             StringBuilder builder = new StringBuilder();
 
             JSObject obj = body.toJSObject();
@@ -195,7 +208,7 @@ public class CapacitorHttpUrlConnection implements ICapacitorHttpUrlConnection {
             while (keys.hasNext()) {
                 String key = keys.next();
                 Object d = obj.get(key);
-                builder.append(key).append("=").append(URLEncoder.encode(d.toString(), "UTF-8"));
+                builder.append(URLEncoder.encode(key, "UTF-8")).append("=").append(URLEncoder.encode(d.toString(), "UTF-8"));
 
                 if (keys.hasNext()) {
                     builder.append("&");

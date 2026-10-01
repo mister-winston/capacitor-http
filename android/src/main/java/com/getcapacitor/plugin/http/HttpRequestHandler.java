@@ -16,17 +16,21 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.json.JSONTokener;
 
 public class HttpRequestHandler {
 
@@ -131,11 +135,11 @@ public class HttpRequestHandler {
             }
 
             Iterator<String> keys = params.keys();
-            
+
             if (!keys.hasNext()) {
                 return this;
             }
-            
+
             StringBuilder urlQueryBuilder = new StringBuilder(initialQueryBuilderStr);
 
             // Build the new query string
@@ -144,38 +148,46 @@ public class HttpRequestHandler {
 
                 // Attempt as JSONArray and fallback to string if it fails
                 try {
-                    StringBuilder value = new StringBuilder();
                     JSONArray arr = params.getJSONArray(key);
                     for (int x = 0; x < arr.length(); x++) {
-                        value.append(key).append("=").append(arr.getString(x));
-                        if (x != arr.length() - 1) {
-                            value.append("&");
-                        }
+                        addUrlParam(urlQueryBuilder, key, arr.getString(x), shouldEncode);
                     }
-                    if (urlQueryBuilder.length() > 0) {
-                        urlQueryBuilder.append("&");
-                    }
-                    urlQueryBuilder.append(value);
                 } catch (JSONException e) {
-                    if (urlQueryBuilder.length() > 0) {
-                        urlQueryBuilder.append("&");
-                    }
-                    urlQueryBuilder.append(key).append("=").append(params.getString(key));
+                    addUrlParam(urlQueryBuilder, key, params.getString(key), shouldEncode);
                 }
             }
 
             String urlQuery = urlQueryBuilder.toString();
 
+            // Use the raw (still encoded) parts, so the existing path and fragment are not decoded
             URI uri = url.toURI();
-            if (shouldEncode) {
-                URI encodedUri = new URI(uri.getScheme(), uri.getAuthority(), uri.getPath(), urlQuery, uri.getFragment());
-                this.url = encodedUri.toURL();
-            } else {
-                String unEncodedUrlString = uri.getScheme() + "://" + uri.getAuthority() + uri.getPath() + ((!urlQuery.equals("")) ? "?" + urlQuery : "") + ((uri.getFragment() != null) ? uri.getFragment() : "");
-                this.url = new URL(unEncodedUrlString);
-            }
+            String urlString =
+                uri.getScheme() +
+                "://" +
+                uri.getRawAuthority() +
+                (uri.getRawPath() != null ? uri.getRawPath() : "") +
+                (!urlQuery.equals("") ? "?" + urlQuery : "") +
+                (uri.getRawFragment() != null ? "#" + uri.getRawFragment() : "");
+            this.url = new URL(urlString);
 
             return this;
+        }
+
+        private static void addUrlParam(StringBuilder builder, String key, String value, boolean shouldEncode) {
+            if (shouldEncode) {
+                try {
+                    key = URLEncoder.encode(key, "UTF-8");
+                    value = URLEncoder.encode(value, "UTF-8");
+                } catch (UnsupportedEncodingException e) {
+                    // UTF-8 is always supported
+                    throw new RuntimeException(e);
+                }
+            }
+
+            if (builder.length() > 0) {
+                builder.append("&");
+            }
+            builder.append(key).append("=").append(value);
         }
 
         public CapacitorHttpUrlConnection build() {
@@ -291,29 +303,35 @@ public class HttpRequestHandler {
     }
 
     /**
-     * Returns a JSObject or a JSArray based on a string-ified input
+     * Parses a string-ified JSON value (object, array, string, number, boolean or null)
      * @param input String-ified JSON that needs parsing
-     * @return A JSObject or JSArray
-     * @throws JSONException thrown if the JSON is malformed
+     * @return The parsed value, or the input itself if it is not valid JSON
      */
-    private static Object parseJSON(String input) throws JSONException {
-        JSONObject json = new JSONObject();
+    private static Object parseJSON(String input) {
+        String trimmed = input.trim();
+        if (trimmed.isEmpty()) {
+            return "";
+        }
+
         try {
-            if ("null".equals(input.trim())) {
-                return JSONObject.NULL;
-            } else if ("true".equals(input.trim())) {
-                return new JSONObject().put("flag", "true");
-            } else if ("false".equals(input.trim())) {
-                return new JSONObject().put("flag", "false");
-            } else {
-                try {
-                    return new JSObject(input);
-                } catch (JSONException e) {
-                    return new JSArray(input);
-                }
+            JSONTokener tokener = new JSONTokener(trimmed);
+            Object value = tokener.nextValue();
+
+            // Reject trailing garbage such as `{"a":1} xyz`
+            if (tokener.more()) {
+                return input;
             }
+
+            // Keep returning Capacitor's own types for objects and arrays
+            if (value instanceof JSONObject) {
+                return new JSObject(trimmed);
+            } else if (value instanceof JSONArray) {
+                return new JSArray(trimmed);
+            }
+
+            return value;
         } catch (JSONException e) {
-            return new JSArray(input);
+            return input;
         }
     }
 
@@ -366,15 +384,15 @@ public class HttpRequestHandler {
      */
     public static JSObject request(PluginCall call, String httpMethod) throws IOException, URISyntaxException, JSONException {
         String urlString = call.getString("url", "");
-        JSObject headers = call.getObject("headers");
-        JSObject params = call.getObject("params");
+        JSObject headers = call.getObject("headers", new JSObject());
+        JSObject params = call.getObject("params", new JSObject());
         Integer connectTimeout = call.getInt("connectTimeout");
         Integer readTimeout = call.getInt("readTimeout");
         Boolean disableRedirects = call.getBoolean("disableRedirects");
         Boolean shouldEncode = call.getBoolean("shouldEncodeUrlParams", true);
         ResponseType responseType = ResponseType.parse(call.getString("responseType"));
 
-        String method = httpMethod != null ? httpMethod.toUpperCase() : call.getString("method", "").toUpperCase();
+        String method = (httpMethod != null ? httpMethod : call.getString("method", "GET")).toUpperCase(Locale.ROOT);
 
         boolean isHttpMutate = method.equals("DELETE") || method.equals("PATCH") || method.equals("POST") || method.equals("PUT");
 
@@ -400,9 +418,13 @@ public class HttpRequestHandler {
             }
         }
 
-        connection.connect();
+        try {
+            connection.connect();
 
-        return buildResponse(connection, responseType);
+            return buildResponse(connection, responseType);
+        } finally {
+            connection.disconnect();
+        }
     }
 
     /**
@@ -416,11 +438,11 @@ public class HttpRequestHandler {
     public static JSObject downloadFile(PluginCall call, Context context, ProgressEmitter progress)
         throws IOException, URISyntaxException, JSONException {
         String urlString = call.getString("url");
-        String method = call.getString("method", "GET").toUpperCase();
+        String method = call.getString("method", "GET").toUpperCase(Locale.ROOT);
         String filePath = call.getString("filePath");
         String fileDirectory = call.getString("fileDirectory", FilesystemUtils.DIRECTORY_DOCUMENTS);
-        JSObject headers = call.getObject("headers");
-        JSObject params = call.getObject("params");
+        JSObject headers = call.getObject("headers", new JSObject());
+        JSObject params = call.getObject("params", new JSObject());
         Integer connectTimeout = call.getInt("connectTimeout");
         Integer readTimeout = call.getInt("readTimeout");
 
@@ -436,33 +458,35 @@ public class HttpRequestHandler {
             .setReadTimeout(readTimeout)
             .openConnection();
 
-        ICapacitorHttpUrlConnection connection = connectionBuilder.build();
-        InputStream connectionInputStream = connection.getInputStream();
+        CapacitorHttpUrlConnection connection = connectionBuilder.build();
 
-        FileOutputStream fileOutputStream = new FileOutputStream(file, false);
+        // Close the streams and the connection, also when the download fails halfway
+        try (
+            InputStream connectionInputStream = connection.getInputStream();
+            FileOutputStream fileOutputStream = new FileOutputStream(file, false)
+        ) {
+            String contentLength = connection.getHeaderField("content-length");
+            int bytes = 0;
+            int maxBytes = 0;
 
-        String contentLength = connection.getHeaderField("content-length");
-        int bytes = 0;
-        int maxBytes = 0;
+            try {
+                maxBytes = contentLength != null ? Integer.parseInt(contentLength) : 0;
+            } catch (NumberFormatException e) {
+                maxBytes = 0;
+            }
 
-        try {
-            maxBytes = contentLength != null ? Integer.parseInt(contentLength) : 0;
-        } catch (NumberFormatException e) {
-            maxBytes = 0;
+            byte[] buffer = new byte[1024];
+            int len;
+
+            while ((len = connectionInputStream.read(buffer)) > 0) {
+                fileOutputStream.write(buffer, 0, len);
+
+                bytes += len;
+                progress.emit(bytes, maxBytes);
+            }
+        } finally {
+            connection.disconnect();
         }
-
-        byte[] buffer = new byte[1024];
-        int len;
-
-        while ((len = connectionInputStream.read(buffer)) > 0) {
-            fileOutputStream.write(buffer, 0, len);
-
-            bytes += len;
-            progress.emit(bytes, maxBytes);
-        }
-
-        connectionInputStream.close();
-        fileOutputStream.close();
 
         return new JSObject() {
             {
@@ -481,14 +505,14 @@ public class HttpRequestHandler {
      */
     public static JSObject uploadFile(PluginCall call, Context context) throws IOException, URISyntaxException, JSONException {
         String urlString = call.getString("url");
-        String method = call.getString("method", "POST").toUpperCase();
+        String method = call.getString("method", "POST").toUpperCase(Locale.ROOT);
         String filePath = call.getString("filePath");
         String fileDirectory = call.getString("fileDirectory", FilesystemUtils.DIRECTORY_DOCUMENTS);
         String name = call.getString("name", "file");
         Integer connectTimeout = call.getInt("connectTimeout");
         Integer readTimeout = call.getInt("readTimeout");
-        JSObject headers = call.getObject("headers");
-        JSObject params = call.getObject("params");
+        JSObject headers = call.getObject("headers", new JSObject());
+        JSObject params = call.getObject("params", new JSObject());
         JSObject data = call.getObject("data");
         ResponseType responseType = ResponseType.parse(call.getString("responseType"));
 
@@ -508,11 +532,15 @@ public class HttpRequestHandler {
         CapacitorHttpUrlConnection connection = connectionBuilder.build();
         connection.setDoOutput(true);
 
-        FormUploader builder = new FormUploader(connection.getHttpConnection());
-        builder.addFilePart(name, file, data);
-        builder.finish();
+        try {
+            FormUploader builder = new FormUploader(connection.getHttpConnection());
+            builder.addFilePart(name, file, data);
+            builder.finish();
 
-        return buildResponse(connection, responseType);
+            return buildResponse(connection, responseType);
+        } finally {
+            connection.disconnect();
+        }
     }
 
     @FunctionalInterface

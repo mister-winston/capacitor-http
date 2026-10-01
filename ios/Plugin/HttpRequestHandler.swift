@@ -32,10 +32,18 @@ fileprivate enum ResponseType: String {
 /// - Returns: The parsed value or an error
 func tryParseJson(_ data: Data) -> Any {
   do {
-    return try JSONSerialization.jsonObject(with: data, options: .mutableContainers)
+    return try JSONSerialization.jsonObject(with: data, options: [.mutableContainers, .fragmentsAllowed])
   } catch {
     return error.localizedDescription
   }
+}
+
+/// Converts JS header values to strings, so non-string values (e.g. numbers) do not crash the cast
+/// - Parameters:
+///     - headers: The headers object passed in from JS
+/// - Returns: The headers with every value as a string
+func stringifyHeaders(_ headers: JSObject?) -> [String: String] {
+    return (headers ?? [:]).mapValues { "\($0)" }
 }
 
 class HttpRequestHandler {
@@ -63,26 +71,30 @@ class HttpRequestHandler {
             return self
         }
 
-        public func setUrlParams(_ params: [String:Any]) -> CapacitorHttpRequestBuilder {
+        public func setUrlParams(_ params: [String:Any]) throws -> CapacitorHttpRequestBuilder {
             if (params.count != 0) {
-                var cmps = URLComponents(url: url!, resolvingAgainstBaseURL: true)
-                if cmps?.queryItems == nil {
-                    cmps?.queryItems = []
+                guard var cmps = URLComponents(url: url!, resolvingAgainstBaseURL: true) else {
+                    throw URLError(.badURL)
+                }
+                if cmps.queryItems == nil {
+                    cmps.queryItems = []
                 }
 
+                // Stringify values, so non-string params (e.g. numbers) do not crash the cast
                 var urlSafeParams: [URLQueryItem] = []
                 for (key, value) in params {
-                    if let arr = value as? [String] {
-                        arr.forEach { str in
-                            urlSafeParams.append(URLQueryItem(name: key, value: str))
+                    if let arr = value as? [Any] {
+                        arr.forEach { item in
+                            urlSafeParams.append(URLQueryItem(name: key, value: "\(item)"))
                         }
                     } else {
-                        urlSafeParams.append(URLQueryItem(name: key, value: (value as! String)))
+                        urlSafeParams.append(URLQueryItem(name: key, value: "\(value)"))
                     }
                 }
 
-                cmps!.queryItems?.append(contentsOf: urlSafeParams)
-                url = cmps!.url!
+                cmps.queryItems?.append(contentsOf: urlSafeParams)
+                guard let paramsUrl = cmps.url else { throw URLError(.badURL) }
+                url = paramsUrl
             }
             return self
         }
@@ -152,15 +164,15 @@ class HttpRequestHandler {
 
     public static func request(_ call: CAPPluginCall, _ httpMethod: String?) throws {
         guard let urlString = call.getString("url") else { throw URLError(.badURL) }
-        guard let method = httpMethod ?? call.getString("method") else { throw URLError(.dataNotAllowed) }
+        let method = httpMethod ?? call.getString("method") ?? "GET"
 
-        let headers = (call.getObject("headers") ?? [:]) as! [String: String]
+        let headers = stringifyHeaders(call.getObject("headers"))
         let params = (call.getObject("params") ?? [:]) as! [String: Any]
         let responseType = call.getString("responseType") ?? "text";
         let connectTimeout = call.getDouble("connectTimeout");
         let readTimeout = call.getDouble("readTimeout");
 
-        let request = try! CapacitorHttpRequestBuilder()
+        let request = try CapacitorHttpRequestBuilder()
             .setUrl(urlString)
             .setMethod(method)
             .setUrlParams(params)
@@ -203,7 +215,7 @@ class HttpRequestHandler {
         let name = call.getString("name") ?? "file"
         let method = call.getString("method") ?? "POST"
         let fileDirectory = call.getString("fileDirectory") ?? "DOCUMENTS"
-        let headers = (call.getObject("headers") ?? [:]) as! [String: String]
+        let headers = stringifyHeaders(call.getObject("headers"))
         let params = (call.getObject("params") ?? [:]) as! [String: Any]
         let body = (call.getObject("data") ?? [:]) as [String: Any]
         let responseType = call.getString("responseType") ?? "text";
@@ -214,7 +226,7 @@ class HttpRequestHandler {
         guard let filePath = call.getString("filePath") else { throw URLError(.badURL) }
         guard let fileUrl = FilesystemUtils.getFileUrl(filePath, fileDirectory) else { throw URLError(.badURL) }
 
-        let request = try! CapacitorHttpRequestBuilder()
+        let request = try CapacitorHttpRequestBuilder()
             .setUrl(urlString)
             .setMethod(method)
             .setUrlParams(params)
@@ -249,7 +261,7 @@ class HttpRequestHandler {
     public static func download(_ call: CAPPluginCall, updateProgress: @escaping ProgressEmitter) throws {
         let method = call.getString("method") ?? "GET"
         let fileDirectory = call.getString("fileDirectory") ?? "DOCUMENTS"
-        let headers = (call.getObject("headers") ?? [:]) as! [String: String]
+        let headers = stringifyHeaders(call.getObject("headers"))
         let params = (call.getObject("params") ?? [:]) as! [String: Any]
         let connectTimeout = call.getDouble("connectTimeout");
         let readTimeout = call.getDouble("readTimeout");
@@ -258,7 +270,7 @@ class HttpRequestHandler {
         guard let urlString = call.getString("url") else { throw URLError(.badURL) }
         guard let filePath = call.getString("filePath") else { throw URLError(.badURL) }
 
-        let request = try! CapacitorHttpRequestBuilder()
+        let request = try CapacitorHttpRequestBuilder()
             .setUrl(urlString)
             .setMethod(method)
             .setUrlParams(params)
@@ -287,10 +299,13 @@ class HttpRequestHandler {
             let fileManager = FileManager.default
 
             let foundDir = FilesystemUtils.getDirectory(directory: fileDirectory)
-            let dir = fileManager.urls(for: foundDir, in: .userDomainMask).first
+            guard let dir = fileManager.urls(for: foundDir, in: .userDomainMask).first else {
+                call.reject("Unable to find the download directory", "DOWNLOAD")
+                return
+            }
 
             do {
-                let dest = dir!.appendingPathComponent(filePath)
+                let dest = dir.appendingPathComponent(filePath)
                 print("File Dest", dest.absoluteString)
 
                 try FilesystemUtils.createDirectoryForFile(dest, true)
